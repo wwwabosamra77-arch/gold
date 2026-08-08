@@ -12,6 +12,7 @@ st.sidebar.header("⚙️ إعدادات التداول")
 
 ASSETS = {
     "🥇 الذهب (XAU/USD)": "GC=F",
+    "🪙 البيتكوين (BTC/USD)": "BTC-USD",
     "🛢️ النفط الخام (Crude Oil)": "CL=F",
     "📈 مؤشر النازداك (NASDAQ)": "NQ=F",
     "📊 مؤشر الداو جونز (US30)": "YM=F",
