@@ -49,7 +49,7 @@ def load_smc_data(ticker, interval, period):
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
     
-    # 2. حساب ATR لحساب الستوب والأهداف
+    # 2. حساب ATR لحساب هامش الحماية للستوب
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
@@ -88,6 +88,12 @@ ema200_p = float(last['EMA_200'])
 atr_p = float(last['ATR']) if not np.isnan(last['ATR']) else (close_p * 0.002)
 rsi_p = float(last['RSI'])
 
+# تحديد قمم وقيعان السيولة الهيكلية (Swing Highs / Lows)
+swing_low = float(df['Low'].iloc[-20:-1].min())
+swing_high = float(df['High'].iloc[-20:-1].max())
+major_high = float(df['High'].iloc[-50:-1].max())
+major_low = float(df['Low'].iloc[-50:-1].min())
+
 # خوارزمية التوافق والذكاء (Confluence Engine)
 score_buy = 0
 score_sell = 0
@@ -106,41 +112,56 @@ if 35 <= rsi_p <= 60: score_sell += 10
 
 sl, tp1, tp2 = None, None, None
 active_signal = None
+rr_ratio = 0.0
 
 st.subheader("🎯 الصفقة المقترحة والتوصية (SMC Signal)")
 
 if score_buy >= 70 and score_buy > score_sell:
     active_signal = "BUY"
-    sl = close_p - (atr_p * 1.5)
-    tp1 = close_p + (atr_p * 2.0)
-    tp2 = close_p + (atr_p * 4.0)
+    # SL أسفل القاع الهيكلي السابق (الأوردر بلوك / السيولة) مع هامش حماية بسيط
+    sl = min(swing_low - (atr_p * 0.2), close_p - (atr_p * 1.0))
+    risk = close_p - sl
     
-    st.success(f"### 🟢 فرصة شراء عالية الثقة على {selected_asset_label} ({score_buy}% Confluence)")
-    st.write("📌 **الأسباب:** توافق الاتجاه + وجود فجوة سعرية (FVG) / سحب سيولة للقاع.")
+    # TP1: القمة الهيكلية القريبة (تصفية سيولة القمة)
+    tp1 = max(swing_high, close_p + (risk * 1.5))
+    # TP2: القمة الهيكلية الكبرى (Major High Liquidity)
+    tp2 = max(major_high, close_p + (risk * 3.0))
+    
+    rr_ratio = (tp1 - close_p) / risk if risk > 0 else 0
+
+    st.success(f"### 🟢 فرصة شراء SMC عالية الثقة ({score_buy}% Confluence)")
+    st.write(f"📌 **الهيكل:** استهداف سيولة القمم السابقة | **نسبة العائد/المخاطرة (R:R):** 1:{rr_ratio:.1f}")
     
     c1, c2 = st.columns(2)
     c1.metric("سعر الدخول الحالي", f"${close_p:.2f}")
-    c2.metric("وقف الخسارة (SL)", f"${sl:.2f}")
-    c1.metric("الهدف الأول (TP1)", f"${tp1:.2f}")
-    c2.metric("الهدف الثاني (TP2)", f"${tp2:.2f}")
+    c2.metric("وقف الخسارة (أسفل القاع)", f"${sl:.2f}")
+    c1.metric("الهدف 1 (سيولة القمة القريبة)", f"${tp1:.2f}")
+    c2.metric("الهدف 2 (سيولة القمة الكبرى)", f"${tp2:.2f}")
 
 elif score_sell >= 70 and score_sell > score_buy:
     active_signal = "SELL"
-    sl = close_p + (atr_p * 1.5)
-    tp1 = close_p - (atr_p * 2.0)
-    tp2 = close_p - (atr_p * 4.0)
+    # SL أعلى القمة الهيكلية السابقة مع هامش حماية
+    sl = max(swing_high + (atr_p * 0.2), close_p + (atr_p * 1.0))
+    risk = sl - close_p
     
-    st.error(f"### 🔴 فرصة بيع عالية الثقة على {selected_asset_label} ({score_sell}% Confluence)")
-    st.write("📌 **الأسباب:** توافق الاتجاه الهابط + اختراق فجوة سعرية / سحب سيولة للقمة.")
+    # TP1: القاع الهيكلي القريب (تصفية سيولة القاع)
+    tp1 = min(swing_low, close_p - (risk * 1.5))
+    # TP2: القاع الهيكلي الأكبر (Major Low Liquidity)
+    tp2 = min(major_low, close_p - (risk * 3.0))
+    
+    rr_ratio = (close_p - tp1) / risk if risk > 0 else 0
+
+    st.error(f"### 🔴 فرصة بيع SMC عالية الثقة ({score_sell}% Confluence)")
+    st.write(f"📌 **الهيكل:** استهداف سيولة القيعان السابقة | **نسبة العائد/المخاطرة (R:R):** 1:{rr_ratio:.1f}")
     
     c1, c2 = st.columns(2)
     c1.metric("سعر الدخول الحالي", f"${close_p:.2f}")
-    c2.metric("وقف الخسارة (SL)", f"${sl:.2f}")
-    c1.metric("الهدف الأول (TP1)", f"${tp1:.2f}")
-    c2.metric("الهدف الثاني (TP2)", f"${tp2:.2f}")
+    c2.metric("وقف الخسارة (أعلى القمة)", f"${sl:.2f}")
+    c1.metric("الهدف 1 (سيولة القاع القريب)", f"${tp1:.2f}")
+    c2.metric("الهدف 2 (سيولة القاع الأكبر)", f"${tp2:.2f}")
 
 else:
-    st.warning(f"### ⚪ لا توجد صفقة واضحة حالياً على {selected_asset_label}")
+    st.warning(f"### ⚪ لا توجد صفقة مكتملة الشروط حالياً على {selected_asset_label}")
     st.info(f"جاهزية الشراء: **{score_buy}%** | جاهزية البيع: **{score_sell}%** (يلزم وصول النسبة إلى 70%+ لظهور الصفقة).")
 
 st.divider()
@@ -162,9 +183,9 @@ fig.add_trace(go.Scatter(x=df.index, y=df['EMA_200'], line=dict(color='blue', wi
 
 # رسم خطوط المستويات الحية للصفقة على الشارت عند وجود إشارة
 if active_signal and sl and tp1 and tp2:
-    fig.add_hline(y=sl, line_dash="dash", line_color="red", annotation_text=f"SL: ${sl:.2f}", row=1, col=1)
-    fig.add_hline(y=tp1, line_dash="dash", line_color="green", annotation_text=f"TP1: ${tp1:.2f}", row=1, col=1)
-    fig.add_hline(y=tp2, line_dash="dash", line_color="lime", annotation_text=f"TP2: ${tp2:.2f}", row=1, col=1)
+    fig.add_hline(y=sl, line_dash="dash", line_color="red", annotation_text=f"SL (Liquidity): ${sl:.2f}", row=1, col=1)
+    fig.add_hline(y=tp1, line_dash="dash", line_color="green", annotation_text=f"TP1 (Target 1): ${tp1:.2f}", row=1, col=1)
+    fig.add_hline(y=tp2, line_dash="dash", line_color="lime", annotation_text=f"TP2 (Major Target): ${tp2:.2f}", row=1, col=1)
 
 # مؤشر RSI
 fig.add_trace(go.Scatter(x=df.index, y=df['RSI'], line=dict(color='purple', width=1.5), name="RSI"), row=2, col=1)
