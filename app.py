@@ -5,11 +5,17 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-st.set_page_config(page_title="أداة SMC لتحليل الذهب", layout="wide")
+st.set_page_config(page_title="منصة SMC التفاعلية للأسواق", layout="wide")
 
-st.title("🥇 لوحة صفقات الذهب عالية الدقة (SMC & Price Action)")
+# القائمة الجانبية لإدارة الأصول والأطر الزمنية
+st.sidebar.header("⚙️ إعدادات التداول")
 
-symbol = "GC=F"
+ASSETS = {
+    "🥇 الذهب (XAU/USD)": "GC=F",
+    "🛢️ النفط الخام (Crude Oil)": "CL=F",
+    "📈 مؤشر النازداك (NASDAQ)": "NQ=F",
+    "📊 مؤشر الداو جونز (US30)": "YM=F",
+}
 
 TIMEFRAMES = {
     "5 دقائق (5M)": {"interval": "5m", "period": "1d"},
@@ -19,7 +25,12 @@ TIMEFRAMES = {
     "يومي (1D)": {"interval": "1d", "period": "1y"},
 }
 
-selected_tf = st.sidebar.selectbox("اختر الفريم المالي للتداول:", list(TIMEFRAMES.keys()))
+selected_asset_label = st.sidebar.selectbox("اختر الأصل المالي:", list(ASSETS.keys()))
+symbol = ASSETS[selected_asset_label]
+
+selected_tf_label = st.sidebar.selectbox("اختر الفريم المالي للتداول:", list(TIMEFRAMES.keys()))
+
+st.title(f"🎯 لوحة إشارات وتحليل {selected_asset_label}")
 
 @st.cache_data(ttl=30)
 def load_smc_data(ticker, interval, period):
@@ -27,18 +38,18 @@ def load_smc_data(ticker, interval, period):
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     
-    # 1. المتوسطات الهيكلية
+    # 1. المتوسطات المتحركة الهيكلية
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
     
-    # 2. حساب ATR
+    # 2. حساب ATR لحساب الستوب والأهداف ديناميكياً
     high_low = df['High'] - df['Low']
     high_close = np.abs(df['High'] - df['Close'].shift())
     low_close = np.abs(df['Low'] - df['Close'].shift())
     ranges = pd.concat([high_low, high_close, low_close], axis=1)
     df['ATR'] = np.max(ranges, axis=1).rolling(14).mean()
     
-    # 3. حساب RSI
+    # 3. حساب مؤشر RSI
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
     loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
@@ -57,7 +68,7 @@ def load_smc_data(ticker, interval, period):
 
     return df
 
-main_tf_params = TIMEFRAMES[selected_tf]
+main_tf_params = TIMEFRAMES[selected_tf_label]
 df = load_smc_data(symbol, main_tf_params['interval'], main_tf_params['period'])
 
 last = df.iloc[-1]
@@ -66,10 +77,10 @@ prev_bars = df.iloc[-5:]
 close_p = float(last['Close'])
 ema50_p = float(last['EMA_50'])
 ema200_p = float(last['EMA_200'])
-atr_p = float(last['ATR']) if not np.isnan(last['ATR']) else 2.5
+atr_p = float(last['ATR']) if not np.isnan(last['ATR']) else (close_p * 0.002)
 rsi_p = float(last['RSI'])
 
-# خوارزمية قياس الثقة والتأكيدات (Confluence Engine)
+# خوارزمية التوافق والذكاء (Confluence Engine)
 score_buy = 0
 score_sell = 0
 
@@ -87,19 +98,18 @@ if prev_bars['Bearish_FVG'].any(): score_sell += 25
 if prev_bars['Bear_Sweep'].any(): score_sell += 25
 if 35 <= rsi_p <= 60: score_sell += 10
 
-# تحديد اتخاذ القرار بناءً على نسبة الثقة (أكثر من 70%)
-st.subheader("🎯 صفقات التداول عالية الثقة (SMC Signal)")
+st.subheader("🎯 الصفقة المقترحة والتوصية (SMC Signal)")
 
 if score_buy >= 70 and score_buy > score_sell:
     sl = close_p - (atr_p * 1.5)
     tp1 = close_p + (atr_p * 2.0)
     tp2 = close_p + (atr_p * 4.0)
     
-    st.success(f"### 🟢 صفقة شراء عالية الثقة ({score_buy}% Confluence)")
-    st.write("📌 **الدوافع:** توافق الاتجاه العام + وجود فجوة سعرية (FVG) / سحب سيولة للقاع.")
+    st.success(f"### 🟢 فرصة شراء عالية الثقة على {selected_asset_label} ({score_buy}% Confluence)")
+    st.write("📌 **الأسباب:** توافق الاتجاه + وجود فجوة سعرية (FVG) / سحب سيولة للقاع.")
     
     c1, c2 = st.columns(2)
-    c1.metric("سعر الدخول", f"${close_p:.2f}")
+    c1.metric("سعر الدخول الحالي", f"${close_p:.2f}")
     c2.metric("وقف الخسارة (SL)", f"${sl:.2f}")
     c1.metric("الهدف الأول (TP1)", f"${tp1:.2f}")
     c2.metric("الهدف الثاني (TP2)", f"${tp2:.2f}")
@@ -109,29 +119,29 @@ elif score_sell >= 70 and score_sell > score_buy:
     tp1 = close_p - (atr_p * 2.0)
     tp2 = close_p - (atr_p * 4.0)
     
-    st.error(f"### 🔴 صفقة بيع عالية الثقة ({score_sell}% Confluence)")
-    st.write("📌 **الدوافع:** توافق الاتجاه الهابط + اختراق فجوة سعرية / سحب سيولة للقمة.")
+    st.error(f"### 🔴 فرصة بيع عالية الثقة على {selected_asset_label} ({score_sell}% Confluence)")
+    st.write("📌 **الأسباب:** توافق الاتجاه الهابط + اختراق فجوة سعرية / سحب سيولة للقمة.")
     
     c1, c2 = st.columns(2)
-    c1.metric("سعر الدخول", f"${close_p:.2f}")
+    c1.metric("سعر الدخول الحالي", f"${close_p:.2f}")
     c2.metric("وقف الخسارة (SL)", f"${sl:.2f}")
     c1.metric("الهدف الأول (TP1)", f"${tp1:.2f}")
     c2.metric("الهدف الثاني (TP2)", f"${tp2:.2f}")
 
 else:
-    st.warning("### ⚪ لا توجد صفقة مكتملة الشروط حالياً")
-    st.info(f"مستوى جاهزية الشراء: **{score_buy}%** | مستوى جاهزية البيع: **{score_sell}%** (يلزم وصول النسبة إلى 70%+ لفتح صفقة عالية الثقة).")
+    st.warning(f"### ⚪ لا توجد صفقة واضحة حالياً على {selected_asset_label}")
+    st.info(f"جاهزية الشراء: **{score_buy}%** | جاهزية البيع: **{score_sell}%** (يلزم وصول النسبة إلى 70%+ لظهور الصفقة).")
 
 st.divider()
 
-# عرض الشارت
-st.subheader(f"📈 الرسم البياني مع مؤشرات المؤسسات - فريم {selected_tf}")
+# رسم الشارت التفاعلي
+st.subheader(f"📈 الشارت التفاعلي لـ {selected_asset_label} - فريم {selected_tf_label}")
 
 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.75, 0.25])
 
 fig.add_trace(go.Candlestick(
     x=df.index, open=df['Open'], high=df['High'],
-    low=df['Low'], close=df['Close'], name="XAU/USD"
+    low=df['Low'], close=df['Close'], name=selected_asset_label
 ), row=1, col=1)
 
 fig.add_trace(go.Scatter(x=df.index, y=df['EMA_50'], line=dict(color='orange', width=1.5), name="EMA 50"), row=1, col=1)
