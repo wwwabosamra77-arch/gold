@@ -98,7 +98,7 @@ swing_high = float(df['High'].iloc[-20:-1].max())
 major_high = float(df['High'].iloc[-50:-1].max())
 major_low = float(df['Low'].iloc[-50:-1].min())
 
-# خوارزمية التوافق والذكاء
+# خوارزمية التوافق SMC
 score_buy = 0
 score_sell = 0
 reasons_buy = []
@@ -106,35 +106,35 @@ reasons_sell = []
 
 if close_p > ema50_p:
     score_buy += 25
-    reasons_buy.append("السعر أعلى متوسط EMA 50 (اتحاد الاتجاه الصاعد)")
+    reasons_buy.append("السعر أعلى متوسط EMA 50")
 if ema50_p > ema200_p:
     score_buy += 15
-    reasons_buy.append("تقاطع إيجابي للـ EMA 50/200")
+    reasons_buy.append("تقاطع إيجابي EMA 50/200")
 if prev_bars['Bullish_FVG'].any():
     score_buy += 25
-    reasons_buy.append("وجود فجوة سعرية شرائية (Bullish FVG)")
+    reasons_buy.append("فجوة سعرية شرائية (Bullish FVG)")
 if prev_bars['Bull_Sweep'].any():
     score_buy += 25
     reasons_buy.append("سحب سيولة القاع (Liquidity Sweep)")
 if 40 <= rsi_p <= 65:
     score_buy += 10
-    reasons_buy.append("زخم RSI في المنطقة الإيجابية")
+    reasons_buy.append("زخم RSI إيجابي")
 
 if close_p < ema50_p:
     score_sell += 25
-    reasons_sell.append("السعر أسفل متوسط EMA 50 (اتحاد الاتجاه الهابط)")
+    reasons_sell.append("السعر أسفل متوسط EMA 50")
 if ema50_p < ema200_p:
     score_sell += 15
-    reasons_sell.append("تقاطع سلبي للـ EMA 50/200")
+    reasons_sell.append("تقاطع سلبي EMA 50/200")
 if prev_bars['Bearish_FVG'].any():
     score_sell += 25
-    reasons_sell.append("وجود فجوة سعرية بيعية (Bearish FVG)")
+    reasons_sell.append("فجوة سعرية بيعية (Bearish FVG)")
 if prev_bars['Bear_Sweep'].any():
     score_sell += 25
     reasons_sell.append("سحب سيولة القمة (Liquidity Sweep)")
 if 35 <= rsi_p <= 60:
     score_sell += 10
-    reasons_sell.append("زخم RSI في المنطقة السلبية")
+    reasons_sell.append("زخم RSI سلبي")
 
 sl, tp1, tp2 = None, None, None
 active_signal = None
@@ -159,7 +159,7 @@ elif score_sell >= 70 and score_sell > score_buy:
     tp2 = min(major_low, close_p - (risk * 3.0))
     signal_reason = " | ".join(reasons_sell)
 
-# متابعة الصفقات المفتوحة في السجل وتحديث نتائجها تلقائياً
+# متابعة صفقات السجل المفتوحة وتحديثها
 for trade in st.session_state.trade_log:
     if trade['status'] == "نشطة (Active)" and trade['asset'] == selected_asset_label:
         curr_high = float(last['High'])
@@ -180,7 +180,7 @@ for trade in st.session_state.trade_log:
                 trade['status'] = "✅ نجاح (Hit TP1)"
                 trade['exit_reason'] = "وصل السعر لمنطقة سيولة القاع السابقة وضرب الهدف بنجاح."
 
-# تسجيل الصفقة الجديدة في السجل إن وجدت
+# تسجيل الصفقة الجديدة
 if active_signal:
     already_logged = any(
         t['asset'] == selected_asset_label and t['type'] == active_signal and t['status'] == "نشطة (Active)"
@@ -200,64 +200,69 @@ if active_signal:
             "exit_reason": "الصفقة ما زالت مستمرة وتتابع حركة الشموع الحالية."
         })
 
-# عرض تفاصيل التوصية الحالية
+# عرض تفاصيل الصفقة الحالية بتنسيق واضح لجميع الشاشات
 if active_signal == "BUY":
     rr = (tp1 - entry_p) / (entry_p - sl) if (entry_p - sl) > 0 else 0
     st.success(f"### 🟢 فرصة شراء SMC عالية الثقة ({score_buy}% Confluence)")
     st.write(f"📌 **أسباب الدخول:** {signal_reason} | **R:R:** 1:{rr:.1f}")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("سعر الدخول (Entry)", f"${entry_p:.2f}")
-    c2.metric("وقف الخسارة (SL)", f"${sl:.2f}")
-    c3.metric("الهدف الأول (TP1)", f"${tp1:.2f}")
-    c4.metric("الهدف الثاني (TP2)", f"${tp2:.2f}")
+    
+    col1, col2 = st.columns(2)
+    col1.metric("🔵 سعر الدخول (Entry)", f"${entry_p:,.2f}")
+    col2.metric("🔴 وقف الخسارة (SL)", f"${sl:,.2f}")
+    
+    col3, col4 = st.columns(2)
+    col3.metric("🟢 الهدف الأول (TP1)", f"${tp1:,.2f}")
+    col4.metric("🟢 الهدف الثاني (TP2)", f"${tp2:,.2f}")
 
 elif active_signal == "SELL":
     rr = (entry_p - tp1) / (sl - entry_p) if (sl - entry_p) > 0 else 0
     st.error(f"### 🔴 فرصة بيع SMC عالية الثقة ({score_sell}% Confluence)")
     st.write(f"📌 **أسباب الدخول:** {signal_reason} | **R:R:** 1:{rr:.1f}")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("سعر الدخول (Entry)", f"${entry_p:.2f}")
-    c2.metric("وقف الخسارة (SL)", f"${sl:.2f}")
-    c3.metric("الهدف الأول (TP1)", f"${tp1:.2f}")
-    c4.metric("الهدف الثاني (TP2)", f"${tp2:.2f}")
+    
+    col1, col2 = st.columns(2)
+    col1.metric("🔵 سعر الدخول (Entry)", f"${entry_p:,.2f}")
+    col2.metric("🔴 وقف الخسارة (SL)", f"${sl:,.2f}")
+    
+    col3, col4 = st.columns(2)
+    col3.metric("🟢 الهدف الأول (TP1)", f"${tp1:,.2f}")
+    col4.metric("🟢 الهدف الثاني (TP2)", f"${tp2:,.2f}")
 
 else:
     st.warning(f"### ⚪ لا توجد صفقة واضحة حالياً على {selected_asset_label}")
-    st.info(f"جاهزية الشراء: **{score_buy}%** | جاهزية البيع: **{score_sell}%** (يلزم وصول النسبة إلى 70%+ لظهور الصفقة).")
+    st.info(f"جاهزية الشراء: **{score_buy}%** | جاهزية البيع: **{score_sell}%** (يلزم وصول النسبة إلى 70%+).")
 
 st.divider()
 
-# رسم الشارت المكبّر (آخر 20 شمعة فقط)
+# الشارت التفاعلي (آخر 20 شمعة مع إمكانية السحب والتنقل)
 st.subheader(f"📈 الشارت التفاعلي المكبّر - {selected_asset_label} (آخر 20 شمعة)")
 
-df_chart = df.tail(20)  # اقتطاع آخر 20 شمعة لتكبير العرض
+df_chart = df.tail(20)
 
 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_heights=[0.75, 0.25])
 
-# الشموع اليابانية
+# الشموع
 fig.add_trace(go.Candlestick(
     x=df_chart.index, open=df_chart['Open'], high=df_chart['High'],
     low=df_chart['Low'], close=df_chart['Close'], name=selected_asset_label
 ), row=1, col=1)
 
-# المتوسط
+# EMA 50
 fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['EMA_50'], line=dict(color='orange', width=1.5), name="EMA 50"), row=1, col=1)
 
-# رسم مستويات الصفقة
+# خطوط الصفقة
 if active_signal and sl and tp1:
-    # خط الدخول (أزرق سماوي)
-    fig.add_hline(y=entry_p, line_dash="solid", line_color="cyan", line_width=2, annotation_text=f"🔵 Entry: ${entry_p:.2f}", row=1, col=1)
-    # خط وقف الخسارة (أحمر)
-    fig.add_hline(y=sl, line_dash="dash", line_color="red", line_width=1.5, annotation_text=f"🔴 SL: ${sl:.2f}", row=1, col=1)
-    # خط الهدف الأول (أخضر)
-    fig.add_hline(y=tp1, line_dash="dash", line_color="lime", line_width=1.5, annotation_text=f"🟢 TP1: ${tp1:.2f}", row=1, col=1)
+    fig.add_hline(y=entry_p, line_dash="solid", line_color="cyan", line_width=2, annotation_text=f"🔵 Entry: ${entry_p:,.2f}", row=1, col=1)
+    fig.add_hline(y=sl, line_dash="dash", line_color="red", line_width=1.5, annotation_text=f"🔴 SL: ${sl:,.2f}", row=1, col=1)
+    fig.add_hline(y=tp1, line_dash="dash", line_color="lime", line_width=1.5, annotation_text=f"🟢 TP1: ${tp1:,.2f}", row=1, col=1)
 
-    # مظلل اتجاه الصفقة المتوقع
+    # المنطقة المظللة المصلحة
     box_color = "rgba(0, 255, 0, 0.12)" if active_signal == "BUY" else "rgba(255, 0, 0, 0.12)"
-    fig.add_rect(
+    fig.add_shape(
+        type="rect",
         x0=df_chart.index[0], x1=df_chart.index[-1],
         y0=min(entry_p, tp1), y1=max(entry_p, tp1),
-        fillcolor=box_color, line_width=0, row=1, col=1
+        fillcolor=box_color, line_width=0,
+        row=1, col=1
     )
 
 # RSI
@@ -265,17 +270,32 @@ fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['RSI'], line=dict(color='p
 fig.add_hline(y=70, line_dash="dash", line_color="red", row=2, col=1)
 fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
 
+# إعدادات الشارت للسحب والتحكم الكامل وإلغاء التقريب عند الضغط
 fig.update_layout(
     xaxis_rangeslider_visible=False,
     height=550,
     template="plotly_dark",
-    margin=dict(l=10, r=10, t=30, b=10)
+    margin=dict(l=10, r=10, t=30, b=10),
+    dragmode='pan'  # تفعيل أداة السحب في جميع الاتجاهات
 )
-st.plotly_chart(fig, use_container_width=True)
+
+fig.update_xaxes(fixedrange=False)  # التمرير الأفقي (يمين/يسار)
+fig.update_yaxes(fixedrange=False)  # التمرير العمودي (فوق/تحت)
+
+st.plotly_chart(
+    fig, 
+    use_container_width=True,
+    config={
+        'doubleClick': False,      # إلغاء الزوم المزعج عند الضغط المزدوج
+        'scrollZoom': False,       # إلغاء الزوم عند التمرير باللمس
+        'displayModeBar': True,    # إظهار شريط الأدوات العلوي
+        'modeBarButtonsToRemove': ['zoom2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d']
+    }
+)
 
 st.divider()
 
-# قسم سجل الصفقات والتحليل التاريخي
+# سجل الصفقات والتحليل التاريخي
 st.subheader("📜 سجل الصفقات والتحليل (Trade History Log)")
 
 if len(st.session_state.trade_log) > 0:
@@ -283,9 +303,9 @@ if len(st.session_state.trade_log) > 0:
         badge = "🟢" if "نجاح" in trade['status'] else ("🔴" if "خسارة" in trade['status'] else "🔵")
         with st.expander(f"{badge} [{trade['time']}] {trade['asset']} | الصفقة: {trade['type']} | الحالة: {trade['status']}"):
             c1, c2, c3 = st.columns(3)
-            c1.write(f"**سعر الدخول:** ${trade['entry']:.2f}")
-            c2.write(f"**وقف الخسارة:** ${trade['sl']:.2f}")
-            c3.write(f"**الهدف:** ${trade['tp1']:.2f}")
+            c1.write(f"**سعر الدخول:** ${trade['entry']:,.2f}")
+            c2.write(f"**وقف الخسارة:** ${trade['sl']:,.2f}")
+            c3.write(f"**الهدف:** ${trade['tp1']:,.2f}")
             
             st.write(f"💡 **سبب فتح الصفقة:** {trade['entry_reason']}")
             st.write(f"🏁 **تحليل النتيجة:** {trade['exit_reason']}")
