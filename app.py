@@ -11,7 +11,10 @@ st.title("🥇 لوحة تحليل وإشارات الذهب (XAU/USD)")
 
 symbol = "GC=F"
 
+# إضافة فريم الدقيقة والـ 5 دقائق
 TIMEFRAMES = {
+    "دقيقة (1M)": {"interval": "1m", "period": "1d"},
+    "5 دقائق (5M)": {"interval": "5m", "period": "1d"},
     "15 دقيقة (15M)": {"interval": "15m", "period": "5d"},
     "ساعة (1H)": {"interval": "1h", "period": "7d"},
     "4 ساعات (4H)": {"interval": "1h", "period": "60d"},
@@ -20,7 +23,7 @@ TIMEFRAMES = {
 
 selected_tf = st.sidebar.selectbox("اختر فريم التداول لحساب الصفقة:", list(TIMEFRAMES.keys()))
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def load_data(ticker, interval, period):
     df = yf.download(ticker, period=period, interval=interval, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
@@ -58,14 +61,12 @@ rsi_val = float(last_row['RSI'])
 ema20 = float(last_row['EMA_20'])
 ema50 = float(last_row['EMA_50'])
 ema200 = float(last_row['EMA_200'])
-atr_val = float(last_row['ATR']) if not np.isnan(last_row['ATR']) else 5.0
+atr_val = float(last_row['ATR']) if not np.isnan(last_row['ATR']) else 2.0
 
 # منطق توليد الصفقات والتوصيات
 signal = "NO_SIGNAL"
 signal_text = "⚪ لا توجد صفقة واضحة الآن - السوق في حالة تذبذب"
-signal_color = "info"
 
-# شروط الشراء
 if close_price > ema50 and ema20 > ema50 and rsi_val > 45 and rsi_val < 68:
     signal = "BUY"
     signal_text = "🟢 فرصة شراء (BUY SETUP)"
@@ -73,7 +74,6 @@ if close_price > ema50 and ema20 > ema50 and rsi_val > 45 and rsi_val < 68:
     tp1 = close_price + (atr_val * 1.5)
     tp2 = close_price + (atr_val * 3.0)
 
-# شروط البيع
 elif close_price < ema50 and ema20 < ema50 and rsi_val < 55 and rsi_val > 32:
     signal = "SELL"
     signal_text = "🔴 فرصة بيع (SELL SETUP)"
@@ -81,24 +81,24 @@ elif close_price < ema50 and ema20 < ema50 and rsi_val < 55 and rsi_val > 32:
     tp1 = close_price - (atr_val * 1.5)
     tp2 = close_price - (atr_val * 3.0)
 
-# عرض التوصية المباشرة
+# عرض التوصية المباشرة بصيغة مناسبة لشاشة الجوال
 st.subheader("🎯 صفقة التداول المقترحة (Live Signal)")
 
 if signal == "BUY":
     st.success(f"### {signal_text}")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2 = st.columns(2)
     c1.metric("سعر الدخول المقترح", f"${close_price:.2f}")
     c2.metric("وقف الخسارة (SL)", f"${stop_loss:.2f}")
-    c3.metric("الهدف الأول (TP1)", f"${tp1:.2f}")
-    c4.metric("الهدف الثاني (TP2)", f"${tp2:.2f}")
+    c1.metric("الهدف الأول (TP1)", f"${tp1:.2f}")
+    c2.metric("الهدف الثاني (TP2)", f"${tp2:.2f}")
 
 elif signal == "SELL":
     st.error(f"### {signal_text}")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2 = st.columns(2)
     c1.metric("سعر الدخول المقترح", f"${close_price:.2f}")
     c2.metric("وقف الخسارة (SL)", f"${stop_loss:.2f}")
-    c3.metric("الهدف الأول (TP1)", f"${tp1:.2f}")
-    c4.metric("الهدف الثاني (TP2)", f"${tp2:.2f}")
+    c1.metric("الهدف الأول (TP1)", f"${tp1:.2f}")
+    c2.metric("الهدف الثاني (TP2)", f"${tp2:.2f}")
 
 else:
     st.warning(f"### {signal_text}")
