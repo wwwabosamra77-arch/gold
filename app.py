@@ -1,7 +1,6 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import pandas_ta as ta
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -28,10 +27,18 @@ def load_data(ticker, interval, period):
     df = yf.download(ticker, period=period, interval=interval, progress=False)
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
-    df['EMA_50'] = ta.ema(df['Close'], length=50)
-    df['EMA_200'] = ta.ema(df['Close'], length=200)
-    df['RSI'] = ta.rsi(df['Close'], length=14)
-    df['ATR'] = ta.atr(df['High'], df['Low'], df['Close'], length=14)
+    
+    # حساب المتوسطات المتحركة
+    df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
+    df['EMA_200'] = df['Close'].ewm(span=200, adjust=False).mean()
+    
+    # حساب مؤشر RSI
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+    loss = (-delta.where(delta < 0, 0)).ewm(alpha=1/14, adjust=False).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+    
     return df
 
 tf_summary = {}
@@ -40,10 +47,10 @@ for name, params in TIMEFRAMES.items():
     try:
         data = load_data(symbol, params['interval'], params['period'])
         if not data.empty and len(data) > 50:
-            last_close = data['Close'].iloc[-1]
-            ema_50 = data['EMA_50'].iloc[-1]
-            ema_200 = data['EMA_200'].iloc[-1] if not pd.isna(data['EMA_200'].iloc[-1]) else ema_50
-            rsi = data['RSI'].iloc[-1]
+            last_close = float(data['Close'].iloc[-1])
+            ema_50 = float(data['EMA_50'].iloc[-1])
+            ema_200 = float(data['EMA_200'].iloc[-1])
+            rsi = float(data['RSI'].iloc[-1])
             
             if last_close > ema_50 and ema_50 > ema_200:
                 bias = "🟢 صاعد قوي"
